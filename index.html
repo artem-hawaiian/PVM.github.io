@@ -48,7 +48,7 @@
             position: absolute;
             inset: 0;
             z-index: 3000;
-            background: #000000;
+            background: #ffffff;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -68,11 +68,43 @@
         }
         .loading-progress {
             margin-top: 24px;
-            color: #fff;
+            color: #000000;
             font-size: 20px;
             font-weight: 700;
-            text-shadow: 0 1px 3px #000;
             letter-spacing: 1px;
+        }
+        .loading-bar-wrap {
+            position: relative;
+            width: 600px;
+            max-width: 80%;
+            height: 40px;
+            margin-top: 16px;
+            background: #e0e0e0;
+            border: 3px solid #000000;
+            border-radius: 6px;
+            overflow: visible;
+        }
+        .loading-bar-fill {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 0%;
+            background: linear-gradient(#8cd44a, #4c9a1c);
+            border-radius: 3px;
+            transition: width 0.2s linear;
+        }
+        .loading-zombie {
+            position: absolute;
+            top: 50%;
+            left: 0%;
+            width: 64px;
+            height: 64px;
+            object-fit: contain;
+            transform: translate(-50%, -60%);
+            transition: left 0.2s linear;
+            pointer-events: none;
+            z-index: 2;
         }
 
         .splash-screen {
@@ -272,6 +304,11 @@
             margin-left: 2px;
             height: 76px;
             z-index: 2;
+            position: relative;
+            background: url('three.png') center/cover no-repeat, #7a4a1e;
+            border: 2px solid #3a1e0a;
+            border-radius: 6px;
+            padding: 0 4px;
         }
 
         .seed {
@@ -284,7 +321,7 @@
             align-items: center;
             justify-content: flex-start;
             cursor: pointer;
-            background: url('three.png') center/cover no-repeat, linear-gradient(135deg, #e9e0b5 0%, #cfc28b 50%, #a99a65 100%);
+            background: linear-gradient(135deg, #e9e0b5 0%, #cfc28b 50%, #a99a65 100%);
             border: 2px solid #301a0c;
             border-radius: 3px;
             box-shadow: inset 1px 1px 0 rgba(255,255,255,0.65), inset -1px -1px 0 rgba(0,0,0,0.35), 0 2px 2px rgba(0,0,0,0.5);
@@ -518,6 +555,10 @@
         <div class="loading-screen" id="loadingScreen">
             <video class="loading-video" id="loadingVideo" src="hype.webm" autoplay loop muted playsinline></video>
             <div class="loading-progress" id="loadingProgress">0 / 0</div>
+            <div class="loading-bar-wrap">
+                <div class="loading-bar-fill" id="loadingBarFill"></div>
+                <img class="loading-zombie" id="loadingZombie" src="kvasake walk.gif" alt="">
+            </div>
         </div>
         <div class="music-toggle" id="musicToggle" title="Вкл/Выкл музыку">
             <img id="musicIcon" src="yes.png" alt="Music On">
@@ -607,6 +648,9 @@
                 peashooter: 7500,
                 egg: 30000
             };
+
+            const CONE_HP = 380;
+            const ZOMBIE_HP = 200;
 
             class AudioManager {
                 constructor() {
@@ -731,14 +775,19 @@
                         ...Object.values(IMAGES).filter(u => !u.startsWith('http')),
                         ...Object.values(AUDIO_FILES),
                         'menu.mp3', 'yes.png', 'no.png', 'дщд.webp', 'start.png', 'фон.png', 'three.png',
-                        'sunbank.webp', 'goroxbank.webp', 'egg.webp'
+                        'sunbank.webp', 'goroxbank.webp', 'egg.webp', 'hype.webm'
                     ];
                     const unique = [...new Set(urls)];
                     const total = unique.length;
                     let loaded = 0;
                     const progressEl = document.getElementById('loadingProgress');
+                    const barFill = document.getElementById('loadingBarFill');
+                    const barZombie = document.getElementById('loadingZombie');
                     const updateProgress = () => {
                         progressEl.textContent = `${loaded} / ${total}`;
+                        const pct = total ? (loaded / total) * 100 : 0;
+                        barFill.style.width = pct + '%';
+                        barZombie.style.left = pct + '%';
                     };
                     updateProgress();
 
@@ -753,7 +802,11 @@
 
                     unique.forEach(url => {
                         const isAudio = /\.(mp3|wav|ogg)$/i.test(url);
-                        const el = isAudio ? new Audio() : new Image();
+                        const isVideo = /\.(webm|mp4)$/i.test(url);
+                        let el;
+                        if (isAudio) el = new Audio();
+                        else if (isVideo) el = document.createElement('video');
+                        else el = new Image();
                         let finished = false;
                         const onLoad = () => {
                             if (finished) return;
@@ -771,6 +824,11 @@
                         };
                         if (isAudio) {
                             el.addEventListener('canplaythrough', onLoad, { once: true });
+                            el.addEventListener('error', onError, { once: true });
+                            el.src = url;
+                            el.load();
+                        } else if (isVideo) {
+                            el.addEventListener('loadeddata', onLoad, { once: true });
                             el.addEventListener('error', onError, { once: true });
                             el.src = url;
                             el.load();
@@ -1115,8 +1173,8 @@
                         id: Date.now() + Math.random(),
                         row,
                         x: rowWidth + 50,
-                        hp: isCone ? 370 : 200,
-                        maxHp: isCone ? 370 : 200,
+                        hp: isCone ? CONE_HP : ZOMBIE_HP,
+                        maxHp: isCone ? CONE_HP : ZOMBIE_HP,
                         hasCone: isCone,
                         element: zombie,
                         alive: true,
@@ -1229,13 +1287,11 @@
                 damageZombie(zombie, amount) {
                     if (!zombie.alive) return;
                     if (zombie.hasCone) {
-                        const coneHp = zombie.hp - 200;
-                        if (coneHp <= 0) {
+                        zombie.hp -= amount;
+                        if (zombie.hp <= ZOMBIE_HP) {
                             zombie.hasCone = false;
-                            zombie.hp = 200 + coneHp;
+                            zombie.hp = ZOMBIE_HP;
                             this.onConeDestroyed(zombie);
-                        } else {
-                            zombie.hp = coneHp;
                         }
                     } else {
                         zombie.hp -= amount;
