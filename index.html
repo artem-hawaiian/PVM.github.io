@@ -44,6 +44,37 @@
             flex-shrink: 0;
         }
 
+        .loading-screen {
+            position: absolute;
+            inset: 0;
+            z-index: 3000;
+            background: #000000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.6s ease;
+        }
+        .loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .loading-video {
+            width: 400px;
+            max-width: 80%;
+            height: auto;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+        .loading-progress {
+            margin-top: 24px;
+            color: #fff;
+            font-size: 20px;
+            font-weight: 700;
+            text-shadow: 0 1px 3px #000;
+            letter-spacing: 1px;
+        }
+
         .splash-screen {
             position: absolute;
             inset: 0;
@@ -253,7 +284,7 @@
             align-items: center;
             justify-content: flex-start;
             cursor: pointer;
-            background: linear-gradient(135deg, #e9e0b5 0%, #cfc28b 50%, #a99a65 100%);
+            background: url('three.png') center/cover no-repeat, linear-gradient(135deg, #e9e0b5 0%, #cfc28b 50%, #a99a65 100%);
             border: 2px solid #301a0c;
             border-radius: 3px;
             box-shadow: inset 1px 1px 0 rgba(255,255,255,0.65), inset -1px -1px 0 rgba(0,0,0,0.35), 0 2px 2px rgba(0,0,0,0.5);
@@ -265,13 +296,24 @@
         }
         .seed.selected {
             border: 3px solid #fff200;
-            box-shadow: 0 0 7px #fff200, inset 1px 1px 0 rgba(255,255,255,0.8);
+            box-shadow: inset 1px 1px 0 rgba(255,255,255,0.8);
             transform: translateY(-2px);
         }
         .seed.disabled {
             opacity: 0.48;
             filter: grayscale(0.8);
             pointer-events: none;
+        }
+        .seed-cooldown {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.55);
+            height: 0%;
+            pointer-events: none;
+            border-radius: 0 0 2px 2px;
+            transition: height 0.1s linear;
         }
         .seed-image {
             width: 46px;
@@ -473,6 +515,10 @@
 </head>
 <body>
     <div class="game-container" id="gameContainer">
+        <div class="loading-screen" id="loadingScreen">
+            <video class="loading-video" id="loadingVideo" src="hype.webm" autoplay loop muted playsinline></video>
+            <div class="loading-progress" id="loadingProgress">0 / 0</div>
+        </div>
         <div class="music-toggle" id="musicToggle" title="Вкл/Выкл музыку">
             <img id="musicIcon" src="yes.png" alt="Music On">
         </div>
@@ -498,14 +544,17 @@
                 <div class="seed" id="seedSunflower" title="Подсолнух - 50 солнц">
                     <div class="seed-image"><img src="sunbank.webp" alt="Подсолнух"></div>
                     <span class="cost">50</span>
+                    <div class="seed-cooldown" id="cooldownSunflower"></div>
                 </div>
                 <div class="seed" id="seedPeashooter" title="Горохострел - 100 солнц">
                     <div class="seed-image"><img src="goroxbank.webp" alt="Горохострел"></div>
                     <span class="cost">100</span>
+                    <div class="seed-cooldown" id="cooldownPeashooter"></div>
                 </div>
                 <div class="seed" id="seedEgg" title="Анонимное Яйцо - 50 солнц">
                     <div class="seed-image"><img src="egg.webp" alt="Яйцо"></div>
                     <span class="cost">50</span>
+                    <div class="seed-cooldown" id="cooldownEgg"></div>
                 </div>
             </div>
         </div>
@@ -519,6 +568,8 @@
         (function() {
             const ZOMBIE_WALK_URL = 'kvasake walk.gif';
             const ZOMBIE_EAT_URL = 'kvasake 67.gif';
+            const CONE_ZOMBIE_WALK_URL = 'konys idet.gif';
+            const CONE_ZOMBIE_EAT_URL = 'kvasake konys eat.gif';
 
             const IMAGES = {
                 sunflower: '9870.gif',
@@ -527,6 +578,8 @@
                 peashooter_shoot: 'gorox boom.gif',
                 zombie: ZOMBIE_WALK_URL,
                 zombie_eat: ZOMBIE_EAT_URL,
+                cone_zombie: CONE_ZOMBIE_WALK_URL,
+                cone_zombie_eat: CONE_ZOMBIE_EAT_URL,
                 projectile: 'yshlepak gun.webp',
                 mower: 'frisk.webp',
                 sun: 'https://cdn-icons-png.flaticon.com/512/2720/2720081.png',
@@ -547,6 +600,12 @@
                 hit: 'plants-vs-zombies-hit.mp3',
                 chomp: 'chomp.mp3',
                 chomp2: 'chomp2.mp3'
+            };
+
+            const PLANT_COOLDOWNS = {
+                sunflower: 7500,
+                peashooter: 7500,
+                egg: 30000
             };
 
             class AudioManager {
@@ -642,13 +701,18 @@
                     this.cellHeight = 0;
                     this.gameStartTime = 0;
                     this.gameContainer = document.getElementById('gameContainer');
+                    this.plantCooldowns = { sunflower: 0, peashooter: 0, egg: 0 };
+                    this.cooldownElements = {
+                        sunflower: document.getElementById('cooldownSunflower'),
+                        peashooter: document.getElementById('cooldownPeashooter'),
+                        egg: document.getElementById('cooldownEgg')
+                    };
 
                     this.adjustScale();
                     window.addEventListener('resize', () => this.adjustScale());
 
                     this.init();
-                    this.setupSplashAndMenu();
-                    this.setupMusicToggle();
+                    this.preloadAssets();
                 }
 
                 adjustScale() {
@@ -660,6 +724,63 @@
                     const scaleY = viewportHeight / containerHeight;
                     const scale = Math.min(scaleX, scaleY);
                     this.gameContainer.style.setProperty('--game-scale', scale);
+                }
+
+                preloadAssets() {
+                    const urls = [
+                        ...Object.values(IMAGES).filter(u => !u.startsWith('http')),
+                        ...Object.values(AUDIO_FILES),
+                        'menu.mp3', 'yes.png', 'no.png', 'дщд.webp', 'start.png', 'фон.png', 'three.png',
+                        'sunbank.webp', 'goroxbank.webp', 'egg.webp'
+                    ];
+                    const unique = [...new Set(urls)];
+                    const total = unique.length;
+                    let loaded = 0;
+                    const progressEl = document.getElementById('loadingProgress');
+                    const updateProgress = () => {
+                        progressEl.textContent = `${loaded} / ${total}`;
+                    };
+                    updateProgress();
+
+                    const done = () => {
+                        setTimeout(() => {
+                            document.getElementById('loadingScreen').classList.add('hidden');
+                            this.setupSplashAndMenu();
+                        }, 400);
+                    };
+
+                    if (total === 0) { done(); return; }
+
+                    unique.forEach(url => {
+                        const isAudio = /\.(mp3|wav|ogg)$/i.test(url);
+                        const el = isAudio ? new Audio() : new Image();
+                        let finished = false;
+                        const onLoad = () => {
+                            if (finished) return;
+                            finished = true;
+                            loaded++;
+                            updateProgress();
+                            if (loaded >= total) done();
+                        };
+                        const onError = () => {
+                            if (finished) return;
+                            finished = true;
+                            loaded++;
+                            updateProgress();
+                            if (loaded >= total) done();
+                        };
+                        if (isAudio) {
+                            el.addEventListener('canplaythrough', onLoad, { once: true });
+                            el.addEventListener('error', onError, { once: true });
+                            el.src = url;
+                            el.load();
+                        } else {
+                            el.addEventListener('load', onLoad, { once: true });
+                            el.addEventListener('error', onError, { once: true });
+                            el.src = url;
+                        }
+                        setTimeout(() => { if (!finished) onError(); }, 15000);
+                    });
                 }
 
                 setupMusicToggle() {
@@ -698,6 +819,7 @@
                     this.createMowers();
                     this.bindEvents();
                     this.updateSunDisplay();
+                    this.setupMusicToggle();
                 }
 
                 createLawn() {
@@ -768,10 +890,15 @@
                     return parseFloat(this.gameContainer.style.getPropertyValue('--game-scale')) || 1;
                 }
 
+                isOnCooldown(type) {
+                    return Date.now() < this.plantCooldowns[type];
+                }
+
                 togglePlantSelection(type) {
                     if (!this.gameRunning) return;
                     let cost = type === 'sunflower' ? 50 : type === 'peashooter' ? 100 : 50;
                     if (this.sunCount < cost) return;
+                    if (this.isOnCooldown(type)) return;
 
                     if (this.selectedPlant === type) {
                         this.selectedPlant = null;
@@ -790,9 +917,24 @@
                     sunSeed.classList.toggle('selected', this.selectedPlant === 'sunflower');
                     peaSeed.classList.toggle('selected', this.selectedPlant === 'peashooter');
                     eggSeed.classList.toggle('selected', this.selectedPlant === 'egg');
-                    sunSeed.classList.toggle('disabled', this.sunCount < 50);
-                    peaSeed.classList.toggle('disabled', this.sunCount < 100);
-                    eggSeed.classList.toggle('disabled', this.sunCount < 50);
+                    sunSeed.classList.toggle('disabled', this.sunCount < 50 || this.isOnCooldown('sunflower'));
+                    peaSeed.classList.toggle('disabled', this.sunCount < 100 || this.isOnCooldown('peashooter'));
+                    eggSeed.classList.toggle('disabled', this.sunCount < 50 || this.isOnCooldown('egg'));
+                }
+
+                updateCooldownVisuals() {
+                    const now = Date.now();
+                    for (const type of ['sunflower', 'peashooter', 'egg']) {
+                        const el = this.cooldownElements[type];
+                        if (!el) continue;
+                        const remaining = this.plantCooldowns[type] - now;
+                        if (remaining > 0) {
+                            const pct = (remaining / PLANT_COOLDOWNS[type]) * 100;
+                            el.style.height = pct + '%';
+                        } else {
+                            el.style.height = '0%';
+                        }
+                    }
                 }
 
                 onCellClick(e) {
@@ -803,11 +945,14 @@
 
                     let cost = this.selectedPlant === 'sunflower' ? 50 : this.selectedPlant === 'peashooter' ? 100 : 50;
                     if (this.sunCount < cost) return;
+                    if (this.isOnCooldown(this.selectedPlant)) return;
 
+                    const plantedType = this.selectedPlant;
                     this.sunCount -= cost;
+                    this.plantCooldowns[plantedType] = Date.now() + PLANT_COOLDOWNS[plantedType];
                     this.updateSunDisplay();
                     this.audioManager.playSound('planting');
-                    this.plantOnCell(row, col, this.selectedPlant);
+                    this.plantOnCell(row, col, plantedType);
                     this.selectedPlant = null;
                     this.ghostPlant.style.display = 'none';
                     this.updateSeedButtons();
@@ -957,17 +1102,37 @@
                     if (!this.gameRunning) return;
                     this.zombieCounter++;
                     const row = Math.floor(Math.random() * this.rows);
+                    const isCone = Math.random() < 0.35;
                     const zombie = document.createElement('img');
-                    zombie.src = IMAGES.zombie;
+                    zombie.src = isCone ? IMAGES.cone_zombie : IMAGES.zombie;
                     zombie.className = 'zombie';
                     const rowElement = document.querySelector(`.row[data-row="${row}"]`);
                     const rowWidth = rowElement.getBoundingClientRect().width;
                     zombie.style.left = `${rowWidth + 50}px`;
                     zombie.style.top = `${this.cellHeight / 2 - 57}px`;
                     rowElement.appendChild(zombie);
-                    const zombieObj = { id: Date.now() + Math.random(), row, x: rowWidth + 50, hp: 200, element: zombie, alive: true, speed: 0.7, eating: false, damageInterval: null, eatingPlantCol: -1 };
+                    const zombieObj = {
+                        id: Date.now() + Math.random(),
+                        row,
+                        x: rowWidth + 50,
+                        hp: isCone ? 370 : 200,
+                        maxHp: isCone ? 370 : 200,
+                        hasCone: isCone,
+                        element: zombie,
+                        alive: true,
+                        speed: 0.7,
+                        eating: false,
+                        damageInterval: null,
+                        eatingPlantCol: -1
+                    };
                     this.zombies.push(zombieObj);
                     this.moveZombie(zombieObj);
+                }
+
+                onConeDestroyed(zombie) {
+                    zombie.hasCone = false;
+                    const baseSrc = zombie.eating ? IMAGES.zombie_eat : IMAGES.zombie;
+                    zombie.element.src = baseSrc;
                 }
 
                 moveZombie(zombie) {
@@ -984,7 +1149,11 @@
                                     if (!zombie.eating) {
                                         zombie.eating = true;
                                         zombie.eatingPlantCol = c;
-                                        zombie.element.src = IMAGES.zombie_eat;
+                                        if (zombie.hasCone) {
+                                            zombie.element.src = IMAGES.cone_zombie_eat;
+                                        } else {
+                                            zombie.element.src = IMAGES.zombie_eat;
+                                        }
                                         this.startEating(zombie, c);
                                     }
                                     break;
@@ -996,7 +1165,7 @@
                                 zombie.eating = false;
                                 zombie.eatingPlantCol = -1;
                                 if (zombie.damageInterval) clearInterval(zombie.damageInterval);
-                                zombie.element.src = IMAGES.zombie;
+                                zombie.element.src = zombie.hasCone ? IMAGES.cone_zombie : IMAGES.zombie;
                             }
                             zombie.x -= zombie.speed;
                             zombie.element.style.left = `${zombie.x}px`;
@@ -1045,16 +1214,39 @@
                                 zombie.eating = false;
                                 zombie.eatingPlantCol = -1;
                                 clearInterval(zombie.damageInterval);
-                                zombie.element.src = IMAGES.zombie;
+                                zombie.element.src = zombie.hasCone ? IMAGES.cone_zombie : IMAGES.zombie;
                             }
                         } else {
                             zombie.eating = false;
                             zombie.eatingPlantCol = -1;
                             clearInterval(zombie.damageInterval);
-                            zombie.element.src = IMAGES.zombie;
+                            zombie.element.src = zombie.hasCone ? IMAGES.cone_zombie : IMAGES.zombie;
                         }
                     }, 1000);
                     this.intervals.push(zombie.damageInterval);
+                }
+
+                damageZombie(zombie, amount) {
+                    if (!zombie.alive) return;
+                    if (zombie.hasCone) {
+                        const coneHp = zombie.hp - 200;
+                        if (coneHp <= 0) {
+                            zombie.hasCone = false;
+                            zombie.hp = 200 + coneHp;
+                            this.onConeDestroyed(zombie);
+                        } else {
+                            zombie.hp = coneHp;
+                        }
+                    } else {
+                        zombie.hp -= amount;
+                    }
+                    if (zombie.hp <= 0) {
+                        zombie.alive = false;
+                        if (zombie.damageInterval) clearInterval(zombie.damageInterval);
+                        zombie.element.remove();
+                        const idx = this.zombies.indexOf(zombie);
+                        if (idx > -1) this.zombies.splice(idx, 1);
+                    }
                 }
 
                 activateMower(row) {
@@ -1070,12 +1262,7 @@
                             if (zombie.row === row && zombie.alive) {
                                 if (Math.abs(x - zombie.x) < 40) {
                                     this.flashElement(zombie.element, 'flash-white', 300);
-                                    zombie.hp -= 200;
-                                    if (zombie.hp <= 0) {
-                                        zombie.alive = false;
-                                        zombie.element.remove();
-                                        if (zombie.damageInterval) clearInterval(zombie.damageInterval);
-                                    }
+                                    this.damageZombie(zombie, 200);
                                 }
                             }
                         });
@@ -1122,16 +1309,11 @@
                             projectileObj.element.style.left = `${projectileObj.x}px`;
                             this.zombies.forEach(zombie => {
                                 if (zombie.row === row && zombie.alive && Math.abs(projectileObj.x - zombie.x) < 30) {
-                                    zombie.hp -= 20;
                                     projectileObj.active = false;
                                     projectileObj.element.remove();
                                     this.audioManager.playSound('hit');
                                     this.flashElement(zombie.element, 'flash-white', 300);
-                                    if (zombie.hp <= 0) {
-                                        zombie.alive = false;
-                                        zombie.element.remove();
-                                        if (zombie.damageInterval) clearInterval(zombie.damageInterval);
-                                    }
+                                    this.damageZombie(zombie, 20);
                                 }
                             });
                             if (projectileObj.x > 1300) {
@@ -1203,6 +1385,7 @@
                         if (!this.gameRunning) return;
                         this.checkPeashooters();
                         this.checkSunflowers();
+                        this.updateCooldownVisuals();
                     }, 100);
                     this.intervals.push(gameLoop);
                 }
