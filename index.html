@@ -146,7 +146,7 @@
         .menu-bg {
             position: absolute;
             inset: 0;
-            background-image: url('фон.png');
+            background-image: url('фон1.png');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
@@ -448,6 +448,10 @@
             left: 50%;
             transform: translate(-50%, -50%);
         }
+        .plant.ushlepok {
+            width: 95%;
+            height: 95%;
+        }
         .plant.flash-white {
             filter: brightness(2) drop-shadow(0 2px 2px rgba(0,0,0,0.2));
         }
@@ -458,6 +462,9 @@
         .plant.phase-2,
         .plant.phase-3 {
             filter: drop-shadow(0 2px 2px rgba(0,0,0,0.2));
+        }
+        .plant.egg-black {
+            filter: brightness(0.15) drop-shadow(0 2px 2px rgba(0,0,0,0.2));
         }
 
         .zombie {
@@ -639,7 +646,11 @@
                 ushlepok_idle: 'amamam.gif',
                 ushlepok_bite: 'улепок кусает.gif',
                 ushlepok_chew: 'ушлепок ест.gif',
-                ushlepok_shoot: 'vis.gif'
+                ushlepok_shoot: 'vis.gif',
+                krumi1: 'круми1.png',
+                krumi2: 'круми2.png',
+                krumi3: 'круми3.png',
+                krumi4: 'круми4.png'
             };
 
             const AUDIO_FILES = {
@@ -661,11 +672,12 @@
 
             const CONE_HP = 380;
             const ZOMBIE_HP = 200;
-            const USHLEPOK_CHEW_TIME = 42000;
+            const USHLEPOK_CHEW_TIME = 3000;
             const USHLEPOK_BITE_TIME = 1000;
             const USHLEPOK_SHOOT_DELAY = 1250;
             const USHLEPOK_SHOOT_DAMAGE = 45;
             const USHLEPOK_RANGE_CELLS = 2;
+            const EGG_KRUMI_CHANCE = 0.05;
 
             class AudioManager {
                 constructor() {
@@ -790,7 +802,7 @@
                     const urls = [
                         ...Object.values(IMAGES).filter(u => !u.startsWith('http')),
                         ...Object.values(AUDIO_FILES),
-                        'menu.mp3', 'yes.png', 'no.png', 'дщд.webp', 'играть.png', 'фон.png', 'three.png',
+                        'menu.mp3', 'yes.png', 'no.png', 'дщд.webp', 'играть.png', 'фон1.png', 'three.png',
                         'sunbank.webp', 'goroxbank.webp', 'egg.webp', 'ushlepokbank.webp', 'hype.webm'
                     ];
                     const unique = [...new Set(urls)];
@@ -1083,8 +1095,14 @@
                         plant.onerror = function() { this.src = IMAGES.peashooter_fallback; };
                         plantData = { type: 'peashooter', element: plant, lastShot: 0, lastSun: Date.now(), hp: 100, firstSunDelay: 0, firstSunDone: true, isShooting: false, row, col, originalSrc: imgSrc };
                     } else if (type === 'egg') {
-                        imgSrc = IMAGES.egg;
-                        plantData = { type: 'egg', element: plant, lastShot: 0, lastSun: Date.now(), hp: 4000, maxHp: 4000, firstSunDelay: 0, firstSunDone: true, isShooting: false, phase: 1, row, col };
+                        const isKrumi = Math.random() < EGG_KRUMI_CHANCE;
+                        if (isKrumi) {
+                            imgSrc = IMAGES.krumi1;
+                            plantData = { type: 'egg', element: plant, lastShot: 0, lastSun: Date.now(), hp: 4000, maxHp: 4000, firstSunDelay: 0, firstSunDone: true, isShooting: false, phase: 1, row, col, isKrumi: true };
+                        } else {
+                            imgSrc = IMAGES.egg;
+                            plantData = { type: 'egg', element: plant, lastShot: 0, lastSun: Date.now(), hp: 4000, maxHp: 4000, firstSunDelay: 0, firstSunDone: true, isShooting: false, phase: 1, row, col, isKrumi: false };
+                        }
                     } else if (type === 'ushlepok') {
                         imgSrc = IMAGES.ushlepok_idle;
                         plantData = {
@@ -1100,7 +1118,7 @@
                         };
                     }
                     plant.src = imgSrc;
-                    plant.className = 'plant';
+                    plant.className = 'plant' + (type === 'ushlepok' ? ' ushlepok' : '');
                     cell.appendChild(plant);
                     cell.classList.add('occupied');
                     this.plants[row][col] = plantData;
@@ -1118,10 +1136,18 @@
                     if (newPhase !== plantData.phase) {
                         plantData.phase = newPhase;
                         const el = plantData.element;
-                        if (newPhase === 1) { el.src = IMAGES.egg; el.classList.remove('phase-2','phase-3'); }
-                        else if (newPhase === 2) { el.src = IMAGES.egg_cracked; el.classList.add('phase-2'); el.classList.remove('phase-3'); }
-                        else if (newPhase === 3) { el.src = IMAGES.egg_broken; el.classList.remove('phase-2'); el.classList.add('phase-3'); }
-                        else if (newPhase === 4) { el.src = IMAGES.egg_dead; el.classList.remove('phase-2','phase-3'); }
+                        if (plantData.isKrumi) {
+                            if (newPhase === 1) { el.src = IMAGES.krumi1; el.classList.remove('egg-black'); }
+                            else if (newPhase === 2) { el.src = IMAGES.krumi2; el.classList.remove('egg-black'); }
+                            else if (newPhase === 3) { el.src = IMAGES.krumi3; el.classList.add('egg-black'); }
+                            else if (newPhase === 4) { el.src = IMAGES.krumi4; el.classList.add('egg-black'); }
+                        } else {
+                            el.classList.remove('egg-black');
+                            if (newPhase === 1) { el.src = IMAGES.egg; el.classList.remove('phase-2','phase-3'); }
+                            else if (newPhase === 2) { el.src = IMAGES.egg_cracked; el.classList.add('phase-2'); el.classList.remove('phase-3'); }
+                            else if (newPhase === 3) { el.src = IMAGES.egg_broken; el.classList.remove('phase-2'); el.classList.add('phase-3'); }
+                            else if (newPhase === 4) { el.src = IMAGES.egg_dead; el.classList.remove('phase-2','phase-3'); }
+                        }
                     }
                 }
 
@@ -1266,7 +1292,6 @@
                         let hasPlant = false;
                         for (let c = 0; c < this.cols; c++) {
                             if (this.plants[zombie.row][c]) {
-                                if (this.plants[zombie.row][c].type === 'ushlepok') continue;
                                 const plantX = c * this.cellWidth;
                                 const zombieHitbox = { left: zombie.x, right: zombie.x + 90, top: 20, bottom: 95 };
                                 if (zombieHitbox.right > plantX && zombieHitbox.left < plantX + this.cellWidth) {
@@ -1311,7 +1336,7 @@
                     if (zombie.damageInterval) clearInterval(zombie.damageInterval);
                     zombie.damageInterval = setInterval(() => {
                         if (!zombie.alive || !this.gameRunning) { clearInterval(zombie.damageInterval); return; }
-                        if (this.plants[zombie.row][plantCol] && this.plants[zombie.row][plantCol].type !== 'ushlepok') {
+                        if (this.plants[zombie.row][plantCol]) {
                             this.audioManager.playChomp();
                             const plant = this.plants[zombie.row][plantCol];
                             let damage = 25;
@@ -1320,7 +1345,6 @@
                             if (plant.type === 'egg') {
                                 this.updateEggPhase(plant, zombie.row, plantCol);
                                 this.spawnParticle(zombie.row, plantCol);
-                            } else if (plant.type === 'ushlepok') {
                             } else {
                                 this.flashElement(plant.element, 'flash-white', 300);
                             }
