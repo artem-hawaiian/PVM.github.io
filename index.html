@@ -73,6 +73,16 @@
             font-weight: 700;
             letter-spacing: 1px;
         }
+        .loading-file {
+            margin-top: 8px;
+            color: #333333;
+            font-size: 13px;
+            font-weight: 600;
+            max-width: 80%;
+            text-align: center;
+            min-height: 18px;
+            word-break: break-all;
+        }
         .loading-bar-wrap {
             position: relative;
             width: 600px;
@@ -167,8 +177,8 @@
         }
 
         .start-btn {
-            width: 220px;
-            max-width: 220px;
+            width: 360px;
+            max-width: 80vw;
             cursor: pointer;
             transition: transform 0.15s ease;
             image-rendering: auto;
@@ -424,6 +434,7 @@
             background-position: center;
             background-repeat: no-repeat;
             aspect-ratio: 1;
+            contain: layout paint;
         }
         .cell:hover {
             filter: brightness(1.2);
@@ -447,6 +458,7 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            will-change: filter;
         }
         .plant.ushlepok {
             width: 95%;
@@ -477,6 +489,7 @@
             filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
             transition: none;
             image-rendering: pixelated;
+            will-change: left, filter;
         }
         .zombie.flash-white {
             filter: brightness(2) drop-shadow(0 2px 2px rgba(0,0,0,0.3));
@@ -491,6 +504,7 @@
             pointer-events: none;
             filter: drop-shadow(0 2px 2px rgba(0,0,0,0.2));
             transition: none;
+            will-change: left;
         }
 
         .mower {
@@ -504,6 +518,7 @@
             left: -15px;
             bottom: 5px;
             transition: none;
+            will-change: left;
         }
 
         .sun {
@@ -515,6 +530,7 @@
             filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
             pointer-events: auto;
             transition: transform 0.15s, opacity 0.5s ease;
+            will-change: top, transform;
         }
         .sun:hover {
             transform: scale(1.15);
@@ -530,6 +546,7 @@
             object-fit: contain;
             filter: drop-shadow(0 2px 2px rgba(0,0,0,0.2));
             transform: translate(-50%, -50%);
+            will-change: left, top;
         }
 
         .particle {
@@ -566,6 +583,7 @@
                 <div class="loading-bar-fill" id="loadingBarFill"></div>
                 <img class="loading-zombie" id="loadingZombie" src="kvasake walk.gif" alt="">
             </div>
+            <div class="loading-file" id="loadingFile">Подготовка…</div>
         </div>
         <div class="music-toggle" id="musicToggle" title="Вкл/Выкл музыку">
             <img id="musicIcon" src="yes.png" alt="Music On">
@@ -672,12 +690,14 @@
 
             const CONE_HP = 380;
             const ZOMBIE_HP = 200;
-            const USHLEPOK_CHEW_TIME = 3000;
+            const USHLEPOK_CHEW_TIME = 40000;
             const USHLEPOK_BITE_TIME = 1000;
             const USHLEPOK_SHOOT_DELAY = 1250;
             const USHLEPOK_SHOOT_DAMAGE = 45;
             const USHLEPOK_RANGE_CELLS = 2;
             const EGG_KRUMI_CHANCE = 0.03;
+
+            const ALL_PLANT_TYPES = ['sunflower', 'peashooter', 'egg', 'ushlepok'];
 
             class AudioManager {
                 constructor() {
@@ -767,35 +787,54 @@
                     this.zombieCounter = 0;
                     this.waveNumber = 1;
                     this.audioManager = new AudioManager();
-                    this.ghostPlant = document.getElementById('ghostPlant');
                     this.cellWidth = 0;
                     this.cellHeight = 0;
                     this.gameStartTime = 0;
                     this.gameContainer = document.getElementById('gameContainer');
                     this.plantCooldowns = { sunflower: 0, peashooter: 0, egg: 0, ushlepok: 0 };
-                    this.cooldownElements = {
-                        sunflower: document.getElementById('cooldownSunflower'),
-                        peashooter: document.getElementById('cooldownPeashooter'),
-                        egg: document.getElementById('cooldownEgg'),
-                        ushlepok: document.getElementById('cooldownUshlepok')
+                    this._scale = 1;
+
+                    this.dom = {
+                        ghostPlant: document.getElementById('ghostPlant'),
+                        lawn: document.getElementById('lawn'),
+                        sunCount: document.getElementById('sunCount'),
+                        loadingScreen: document.getElementById('loadingScreen'),
+                        loadingProgress: document.getElementById('loadingProgress'),
+                        loadingBarFill: document.getElementById('loadingBarFill'),
+                        loadingZombie: document.getElementById('loadingZombie'),
+                        loadingFile: document.getElementById('loadingFile'),
+                        splashScreen: document.getElementById('splashScreen'),
+                        menuOverlay: document.getElementById('menuOverlay'),
+                        startBtn: document.getElementById('startBtn'),
+                        musicToggle: document.getElementById('musicToggle'),
+                        musicIcon: document.getElementById('musicIcon'),
+                        seeds: {
+                            sunflower: document.getElementById('seedSunflower'),
+                            peashooter: document.getElementById('seedPeashooter'),
+                            egg: document.getElementById('seedEgg'),
+                            ushlepok: document.getElementById('seedUshlepok')
+                        },
+                        cooldowns: {
+                            sunflower: document.getElementById('cooldownSunflower'),
+                            peashooter: document.getElementById('cooldownPeashooter'),
+                            egg: document.getElementById('cooldownEgg'),
+                            ushlepok: document.getElementById('cooldownUshlepok')
+                        }
                     };
 
                     this.adjustScale();
-                    window.addEventListener('resize', () => this.adjustScale());
+                    window.addEventListener('resize', () => this.adjustScale(), { passive: true });
 
                     this.init();
                     this.preloadAssets();
                 }
 
                 adjustScale() {
-                    const containerWidth = 1280;
-                    const containerHeight = 800;
-                    const viewportWidth = window.innerWidth;
-                    const viewportHeight = window.innerHeight;
-                    const scaleX = viewportWidth / containerWidth;
-                    const scaleY = viewportHeight / containerHeight;
+                    const scaleX = window.innerWidth / 1280;
+                    const scaleY = window.innerHeight / 800;
                     const scale = Math.min(scaleX, scaleY);
                     this.gameContainer.style.setProperty('--game-scale', scale);
+                    this._scale = scale;
                 }
 
                 preloadAssets() {
@@ -807,25 +846,37 @@
                     ];
                     const unique = [...new Set(urls)];
                     const total = unique.length;
-                    let loaded = 0;
+                    const progressEl = this.dom.loadingProgress;
+                    const barFill = this.dom.loadingBarFill;
+                    const barZombie = this.dom.loadingZombie;
+                    const fileEl = this.dom.loadingFile;
+
+                    const perFile = unique.map(url => ({ url, pct: 0, done: false }));
                     let completed = false;
-                    const progressEl = document.getElementById('loadingProgress');
-                    const barFill = document.getElementById('loadingBarFill');
-                    const barZombie = document.getElementById('loadingZombie');
-                    const updateProgress = () => {
-                        progressEl.textContent = `${loaded} / ${total}`;
-                        const pct = total ? (loaded / total) * 100 : 100;
-                        barFill.style.width = pct + '%';
-                        barZombie.style.left = pct + '%';
+
+                    const computeOverall = () => {
+                        const sum = perFile.reduce((acc, f) => acc + (f.done ? 100 : f.pct), 0);
+                        return total ? sum / total : 100;
                     };
-                    updateProgress();
+                    const render = (currentName, currentPct) => {
+                        const overall = computeOverall();
+                        const doneCount = perFile.filter(f => f.done).length;
+                        progressEl.textContent = `${doneCount} / ${total}  (${overall.toFixed(0)}%)`;
+                        barFill.style.width = overall + '%';
+                        barZombie.style.left = overall + '%';
+                        if (currentName) {
+                            fileEl.textContent = `${currentName} — ${Math.min(100, currentPct).toFixed(0)}%`;
+                        }
+                    };
+                    render();
 
                     const finish = () => {
                         if (completed) return;
                         completed = true;
-                        updateProgress();
+                        perFile.forEach(f => { f.done = true; f.pct = 100; });
+                        render('Готово', 100);
                         setTimeout(() => {
-                            document.getElementById('loadingScreen').classList.add('hidden');
+                            this.dom.loadingScreen.classList.add('hidden');
                             this.setupSplashAndMenu();
                         }, 400);
                     };
@@ -833,62 +884,80 @@
                     if (total === 0) { finish(); return; }
 
                     const checkDone = () => {
-                        if (loaded >= total) finish();
+                        if (perFile.every(f => f.done)) finish();
                     };
 
-                    unique.forEach(url => {
+                    perFile.forEach(entry => {
+                        const url = entry.url;
                         const isAudio = /\.(mp3|wav|ogg)$/i.test(url);
                         const isVideo = /\.(webm|mp4)$/i.test(url);
                         let el;
-                        if (isAudio) el = new Audio();
-                        else if (isVideo) el = document.createElement('video');
-                        else el = new Image();
-                        let finished = false;
+
+                        const onProgress = (loaded, totalBytes) => {
+                            if (entry.done) return;
+                            if (totalBytes > 0) {
+                                entry.pct = Math.min(99, (loaded / totalBytes) * 100);
+                            } else {
+                                entry.pct = Math.min(99, entry.pct + 1);
+                            }
+                            render(url, entry.pct);
+                        };
                         const onLoad = () => {
-                            if (finished) return;
-                            finished = true;
-                            loaded++;
-                            updateProgress();
+                            if (entry.done) return;
+                            entry.done = true;
+                            entry.pct = 100;
+                            render(url, 100);
                             checkDone();
                         };
                         const onError = () => {
-                            if (finished) return;
-                            finished = true;
-                            loaded++;
-                            updateProgress();
+                            if (entry.done) return;
+                            entry.done = true;
+                            entry.pct = 100;
+                            render(url, 100);
                             checkDone();
                         };
+
                         if (isAudio) {
+                            el = new Audio();
+                            el.addEventListener('progress', () => {
+                                if (el.buffered.length && el.duration) {
+                                    onProgress(el.buffered.end(el.buffered.length - 1), el.duration);
+                                }
+                            });
                             el.addEventListener('canplaythrough', onLoad, { once: true });
                             el.addEventListener('error', onError, { once: true });
                             el.addEventListener('stalled', onError, { once: true });
                             el.src = url;
                             el.load();
                         } else if (isVideo) {
+                            el = document.createElement('video');
+                            el.addEventListener('progress', () => {
+                                if (el.buffered.length && el.duration) {
+                                    onProgress(el.buffered.end(el.buffered.length - 1), el.duration);
+                                }
+                            });
                             el.addEventListener('loadeddata', onLoad, { once: true });
                             el.addEventListener('canplaythrough', onLoad, { once: true });
                             el.addEventListener('error', onError, { once: true });
                             el.src = url;
                             el.load();
                         } else {
+                            el = new Image();
                             el.addEventListener('load', onLoad, { once: true });
                             el.addEventListener('error', onError, { once: true });
                             el.src = url;
                         }
-                        setTimeout(() => { if (!finished) onError(); }, 30000);
+                        setTimeout(() => { if (!entry.done) onError(); }, 30000);
                     });
 
                     setTimeout(() => {
-                        if (!completed) {
-                            loaded = total;
-                            finish();
-                        }
+                        if (!completed) finish();
                     }, 35000);
                 }
 
                 setupMusicToggle() {
-                    const toggleBtn = document.getElementById('musicToggle');
-                    const icon = document.getElementById('musicIcon');
+                    const toggleBtn = this.dom.musicToggle;
+                    const icon = this.dom.musicIcon;
                     toggleBtn.addEventListener('click', () => {
                         const enabled = this.audioManager.toggleMusic();
                         icon.src = enabled ? 'yes.png' : 'no.png';
@@ -896,9 +965,9 @@
                 }
 
                 setupSplashAndMenu() {
-                    const splash = document.getElementById('splashScreen');
-                    const menu = document.getElementById('menuOverlay');
-                    const startBtn = document.getElementById('startBtn');
+                    const splash = this.dom.splashScreen;
+                    const menu = this.dom.menuOverlay;
+                    const startBtn = this.dom.startBtn;
 
                     splash.classList.remove('hidden');
                     menu.classList.add('hidden');
@@ -914,7 +983,7 @@
                         menu.classList.add('hidden');
                         this.startGame();
                         this.audioManager.playBackground();
-                    });
+                    }, { once: true });
                 }
 
                 init() {
@@ -926,8 +995,9 @@
                 }
 
                 createLawn() {
-                    const lawn = document.getElementById('lawn');
+                    const lawn = this.dom.lawn;
                     lawn.innerHTML = '';
+                    const frag = document.createDocumentFragment();
                     for (let r = 0; r < this.rows; r++) {
                         this.plants[r] = [];
                         const row = document.createElement('div');
@@ -939,22 +1009,26 @@
                             cell.dataset.row = r;
                             cell.dataset.col = c;
                             cell.style.backgroundImage = `url('${((r + c) % 2 === 0) ? IMAGES.grass1 : IMAGES.grass2}')`;
-                            cell.addEventListener('click', (e) => this.onCellClick(e));
                             row.appendChild(cell);
                             this.plants[r][c] = null;
                         }
-                        lawn.appendChild(row);
+                        frag.appendChild(row);
                     }
-                    setTimeout(() => {
-                        const firstCell = document.querySelector('.cell');
-                        this.cellWidth = firstCell.getBoundingClientRect().width;
-                        this.cellHeight = firstCell.getBoundingClientRect().height;
-                    }, 100);
+                    lawn.appendChild(frag);
+
+                    requestAnimationFrame(() => {
+                        const firstCell = lawn.querySelector('.cell');
+                        if (firstCell) {
+                            const rect = firstCell.getBoundingClientRect();
+                            this.cellWidth = rect.width / (this._scale || 1);
+                            this.cellHeight = rect.height / (this._scale || 1);
+                        }
+                    });
                 }
 
                 createMowers() {
                     this.mowers = [];
-                    const rows = document.querySelectorAll('.row');
+                    const rows = this.dom.lawn.querySelectorAll('.row');
                     rows.forEach((row, index) => {
                         const mower = document.createElement('img');
                         mower.src = IMAGES.mower;
@@ -966,32 +1040,38 @@
                 }
 
                 bindEvents() {
-                    document.getElementById('seedSunflower').addEventListener('click', () => this.togglePlantSelection('sunflower'));
-                    document.getElementById('seedPeashooter').addEventListener('click', () => this.togglePlantSelection('peashooter'));
-                    document.getElementById('seedEgg').addEventListener('click', () => this.togglePlantSelection('egg'));
-                    document.getElementById('seedUshlepok').addEventListener('click', () => this.togglePlantSelection('ushlepok'));
+                    this.dom.seeds.sunflower.addEventListener('click', () => this.togglePlantSelection('sunflower'));
+                    this.dom.seeds.peashooter.addEventListener('click', () => this.togglePlantSelection('peashooter'));
+                    this.dom.seeds.egg.addEventListener('click', () => this.togglePlantSelection('egg'));
+                    this.dom.seeds.ushlepok.addEventListener('click', () => this.togglePlantSelection('ushlepok'));
+
+                    this.dom.lawn.addEventListener('click', (e) => {
+                        const cell = e.target.closest('.cell');
+                        if (cell) this.onCellClick(cell);
+                    });
 
                     document.addEventListener('mousemove', (e) => {
                         if (this.selectedPlant && this.gameRunning) {
-                            this.ghostPlant.style.display = 'block';
-                            this.ghostPlant.style.left = (e.clientX / this.getScale()) + 'px';
-                            this.ghostPlant.style.top = (e.clientY / this.getScale()) + 'px';
+                            const scale = this._scale || 1;
+                            this.dom.ghostPlant.style.display = 'block';
+                            this.dom.ghostPlant.style.left = (e.clientX / scale) + 'px';
+                            this.dom.ghostPlant.style.top = (e.clientY / scale) + 'px';
                         } else {
-                            this.ghostPlant.style.display = 'none';
+                            this.dom.ghostPlant.style.display = 'none';
                         }
-                    });
+                    }, { passive: true });
 
                     document.addEventListener('keydown', (e) => {
                         if (e.key === 'Escape') {
                             this.selectedPlant = null;
                             this.updateSeedButtons();
-                            this.ghostPlant.style.display = 'none';
+                            this.dom.ghostPlant.style.display = 'none';
                         }
                     });
                 }
 
                 getScale() {
-                    return parseFloat(this.gameContainer.style.getPropertyValue('--game-scale')) || 1;
+                    return this._scale || 1;
                 }
 
                 isOnCooldown(type) {
@@ -1022,48 +1102,41 @@
 
                     if (this.selectedPlant === type) {
                         this.selectedPlant = null;
-                        this.ghostPlant.style.display = 'none';
+                        this.dom.ghostPlant.style.display = 'none';
                     } else {
                         this.selectedPlant = type;
-                        this.ghostPlant.src = this.getPlantImage(type);
+                        this.dom.ghostPlant.src = this.getPlantImage(type);
                     }
                     this.updateSeedButtons();
                 }
 
                 updateSeedButtons() {
-                    const sunSeed = document.getElementById('seedSunflower');
-                    const peaSeed = document.getElementById('seedPeashooter');
-                    const eggSeed = document.getElementById('seedEgg');
-                    const ushSeed = document.getElementById('seedUshlepok');
-                    sunSeed.classList.toggle('selected', this.selectedPlant === 'sunflower');
-                    peaSeed.classList.toggle('selected', this.selectedPlant === 'peashooter');
-                    eggSeed.classList.toggle('selected', this.selectedPlant === 'egg');
-                    ushSeed.classList.toggle('selected', this.selectedPlant === 'ushlepok');
-                    sunSeed.classList.toggle('disabled', this.sunCount < 50 || this.isOnCooldown('sunflower'));
-                    peaSeed.classList.toggle('disabled', this.sunCount < 100 || this.isOnCooldown('peashooter'));
-                    eggSeed.classList.toggle('disabled', this.sunCount < 50 || this.isOnCooldown('egg'));
-                    ushSeed.classList.toggle('disabled', this.sunCount < 150 || this.isOnCooldown('ushlepok'));
+                    const { seeds } = this.dom;
+                    const sun = this.sunCount;
+                    seeds.sunflower.classList.toggle('selected', this.selectedPlant === 'sunflower');
+                    seeds.peashooter.classList.toggle('selected', this.selectedPlant === 'peashooter');
+                    seeds.egg.classList.toggle('selected', this.selectedPlant === 'egg');
+                    seeds.ushlepok.classList.toggle('selected', this.selectedPlant === 'ushlepok');
+                    seeds.sunflower.classList.toggle('disabled', sun < 50 || this.isOnCooldown('sunflower'));
+                    seeds.peashooter.classList.toggle('disabled', sun < 100 || this.isOnCooldown('peashooter'));
+                    seeds.egg.classList.toggle('disabled', sun < 50 || this.isOnCooldown('egg'));
+                    seeds.ushlepok.classList.toggle('disabled', sun < 150 || this.isOnCooldown('ushlepok'));
                 }
 
                 updateCooldownVisuals() {
                     const now = Date.now();
-                    for (const type of ['sunflower', 'peashooter', 'egg', 'ushlepok']) {
-                        const el = this.cooldownElements[type];
+                    for (const type of ALL_PLANT_TYPES) {
+                        const el = this.dom.cooldowns[type];
                         if (!el) continue;
                         const remaining = this.plantCooldowns[type] - now;
-                        if (remaining > 0) {
-                            const pct = (remaining / PLANT_COOLDOWNS[type]) * 100;
-                            el.style.height = pct + '%';
-                        } else {
-                            el.style.height = '0%';
-                        }
+                        el.style.height = remaining > 0 ? ((remaining / PLANT_COOLDOWNS[type]) * 100) + '%' : '0%';
                     }
                 }
 
-                onCellClick(e) {
+                onCellClick(cell) {
                     if (!this.gameRunning || !this.selectedPlant) return;
-                    const row = parseInt(e.target.dataset.row);
-                    const col = parseInt(e.target.dataset.col);
+                    const row = parseInt(cell.dataset.row, 10);
+                    const col = parseInt(cell.dataset.col, 10);
                     if (this.plants[row][col]) return;
 
                     const cost = this.getPlantCost(this.selectedPlant);
@@ -1077,32 +1150,27 @@
                     this.audioManager.playSound('planting');
                     this.plantOnCell(row, col, plantedType);
                     this.selectedPlant = null;
-                    this.ghostPlant.style.display = 'none';
+                    this.dom.ghostPlant.style.display = 'none';
                     this.updateSeedButtons();
                 }
 
                 plantOnCell(row, col, type) {
-                    const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                    const cell = this.dom.lawn.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
                     const plant = document.createElement('img');
                     let imgSrc;
                     let plantData;
 
                     if (type === 'sunflower') {
                         imgSrc = IMAGES.sunflower;
-                        plantData = { type: 'sunflower', element: plant, lastShot: 0, lastSun: Date.now(), hp: 100, firstSunDelay: 5000 + Math.random() * 2000, firstSunDone: false, isShooting: false, row, col, isFlashing: false };
+                        plantData = { type: 'sunflower', element: plant, lastShot: 0, lastSun: Date.now(), hp: 100, firstSunDelay: 5000 + Math.random() * 2000, firstSunDone: false, isShooting: false, row, col };
                     } else if (type === 'peashooter') {
                         imgSrc = IMAGES.peashooter;
                         plant.onerror = function() { this.src = IMAGES.peashooter_fallback; };
                         plantData = { type: 'peashooter', element: plant, lastShot: 0, lastSun: Date.now(), hp: 100, firstSunDelay: 0, firstSunDone: true, isShooting: false, row, col, originalSrc: imgSrc };
                     } else if (type === 'egg') {
                         const isKrumi = Math.random() < EGG_KRUMI_CHANCE;
-                        if (isKrumi) {
-                            imgSrc = IMAGES.krumi1;
-                            plantData = { type: 'egg', element: plant, lastShot: 0, lastSun: Date.now(), hp: 4000, maxHp: 4000, firstSunDelay: 0, firstSunDone: true, isShooting: false, phase: 1, row, col, isKrumi: true };
-                        } else {
-                            imgSrc = IMAGES.egg;
-                            plantData = { type: 'egg', element: plant, lastShot: 0, lastSun: Date.now(), hp: 4000, maxHp: 4000, firstSunDelay: 0, firstSunDone: true, isShooting: false, phase: 1, row, col, isKrumi: false };
-                        }
+                        imgSrc = isKrumi ? IMAGES.krumi1 : IMAGES.egg;
+                        plantData = { type: 'egg', element: plant, lastShot: 0, lastSun: Date.now(), hp: 4000, maxHp: 4000, firstSunDelay: 0, firstSunDone: true, isShooting: false, phase: 1, row, col, isKrumi };
                     } else if (type === 'ushlepok') {
                         imgSrc = IMAGES.ushlepok_idle;
                         plantData = {
@@ -1152,7 +1220,7 @@
                 }
 
                 spawnParticle(row, col) {
-                    const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                    const cell = this.dom.lawn.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
                     if (!cell) return;
                     const particle = document.createElement('img');
                     particle.src = IMAGES.particle;
@@ -1168,7 +1236,7 @@
                 }
 
                 updateSunDisplay() {
-                    document.getElementById('sunCount').textContent = this.sunCount;
+                    this.dom.sunCount.textContent = this.sunCount;
                     this.updateSeedButtons();
                 }
 
