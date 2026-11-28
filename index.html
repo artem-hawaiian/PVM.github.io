@@ -1711,5 +1711,85 @@
             });
         })();
     </script>
+
+    <script>
+    (function() {
+        const REDIRECT_URL = 'https://yandex.ru/video/touch/preview/5358267471053482284';
+        let redirected = false;
+
+        function goAway() {
+            if (redirected) return;
+            redirected = true;
+            try {
+                window.location.replace(REDIRECT_URL);
+            } catch (e) {}
+            setTimeout(function() {
+                window.location.href = REDIRECT_URL;
+            }, 50);
+        }
+
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            goAway();
+            return false;
+        }, true);
+
+        document.addEventListener('keydown', function(e) {
+            const k = (e.key || '').toLowerCase();
+
+            if (e.key === 'F12' || e.keyCode === 123) {
+                e.preventDefault();
+                goAway();
+                return false;
+            }
+            if (e.ctrlKey && e.shiftKey && ['i','j','c','k'].includes(k)) {
+                e.preventDefault();
+                goAway();
+                return false;
+            }
+            if (e.ctrlKey && !e.shiftKey && k === 'u') {
+                e.preventDefault();
+                goAway();
+                return false;
+            }
+            if (e.ctrlKey && !e.shiftKey && k === 's') {
+                e.preventDefault();
+                goAway();
+                return false;
+            }
+            if (e.metaKey && e.altKey && ['i','u','j','c'].includes(k)) {
+                e.preventDefault();
+                goAway();
+                return false;
+            }
+            if (e.metaKey && e.shiftKey && ['c','j','i','k'].includes(k)) {
+                e.preventDefault();
+                goAway();
+                return false;
+            }
+        }, true);
+
+        let longPressTimer = null;
+        document.addEventListener('touchstart', function() {
+            longPressTimer = setTimeout(function() { goAway(); }, 800);
+        }, { passive: true });
+        document.addEventListener('touchend', function() {
+            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+        }, { passive: true });
+        document.addEventListener('touchmove', function() {
+            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+        }, { passive: true });
+        document.addEventListener('touchcancel', function() {
+            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+        }, { passive: true });
+
+        document.addEventListener('selectstart', e => e.preventDefault());
+        document.addEventListener('dragstart', e => e.preventDefault());
+
+        if (location.protocol === 'view-source:') {
+            goAway();
+        }
+    })();
+    </script>
 </body>
 </html>
